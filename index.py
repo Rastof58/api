@@ -26,14 +26,18 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Configure CORS with specific origin for Vercel
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://tuniwix.pages.dev", "http://localhost:3000", "http://localhost:5000"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+# Simple CORS - allow all origins
+CORS(app, origins="*")
+
+# Add before_request to handle CORS for all requests
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 200
 
 # Configuration
 API_TOKEN_EXPIRY = 3600  # 1 hour
@@ -145,7 +149,7 @@ def retrieve_token_from_supabase(token):
 @app.route('/', methods=['GET'])
 def index():
     """API info endpoint"""
-    response = jsonify({
+    return jsonify({
         'name': 'Tuniwix Stream Token API (Simplified)',
         'version': '2.0.0',
         'status': 'running',
@@ -155,32 +159,29 @@ def index():
             'GET /api/get-url/<token>': 'Retrieve stream URL using token',
             'GET /api/health': 'Check API health',
         }
-    })
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response, 200
+    }), 200
 
 @app.route('/api/health', methods=['GET'])
 def api_health():
     """Health check endpoint"""
-    response = jsonify({
+    return jsonify({
         'status': 'healthy',
         'service': 'API running',
         'storage': 'Hybrid (Supabase + Memory)',
         'tokens_in_memory': len(TOKEN_STORE)
-    })
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response, 200
+    }), 200
 
-@app.route('/api/generate-token', methods=['POST'])
+@app.route('/api/generate-token', methods=['POST', 'OPTIONS'])
 def api_generate_token():
     """Generate a token for a stream URL"""
+    if request.method == 'OPTIONS':
+        return '', 200
+        
     try:
         data = request.get_json()
         
         if not data or 'stream_url' not in data or 'media_type' not in data or 'media_id' not in data:
-            response = jsonify({'error': 'Missing required fields: stream_url, media_type, media_id'})
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            return response, 400
+            return jsonify({'error': 'Missing required fields: stream_url, media_type, media_id'}), 400
         
         # Generate unique token
         token = str(uuid.uuid4())
@@ -205,24 +206,23 @@ def api_generate_token():
         
         logger.info(f"Generated token: {token[:8]}... for {media_type} ID:{media_id}")
         
-        response = jsonify({
+        return jsonify({
             'success': True,
             'token': token,
             'expires_in': API_TOKEN_EXPIRY,
             'storage': 'Supabase' if supabase_success else 'Memory'
-        })
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response, 200
+        }), 200
         
     except Exception as e:
         logger.error(f"Error in generate-token: {e}")
-        response = jsonify({'error': str(e)})
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response, 500
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/get-url/<token>', methods=['GET'])
+@app.route('/api/get-url/<token>', methods=['GET', 'OPTIONS'])
 def api_get_url(token):
     """Retrieve stream URL using token"""
+    if request.method == 'OPTIONS':
+        return '', 200
+        
     try:
         # Try Supabase first
         result = retrieve_token_from_supabase(token)
@@ -232,19 +232,13 @@ def api_get_url(token):
             result = retrieve_token_from_memory(token)
         
         if not result:
-            response = jsonify({'error': 'Invalid or expired token'})
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            return response, 404
+            return jsonify({'error': 'Invalid or expired token'}), 404
         
-        response = jsonify(result)
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response, 200
+        return jsonify(result), 200
         
     except Exception as e:
         logger.error(f"Error in get-url: {e}")
-        response = jsonify({'error': str(e)})
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response, 500
+        return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)
 def not_found(error):
