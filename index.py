@@ -146,42 +146,64 @@ def retrieve_token_from_supabase(token):
         logger.warning(f"Supabase retrieval failed: {e}")
         return None
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'OPTIONS'])
 def index():
     """API info endpoint"""
-    return jsonify({
-        'name': 'Tuniwix Stream Token API (Simplified)',
-        'version': '2.0.0',
-        'status': 'running',
-        'storage': 'Supabase REST API + Memory Fallback',
-        'endpoints': {
-            'POST /api/generate-token': 'Generate a token for a stream URL',
-            'GET /api/get-url/<token>': 'Retrieve stream URL using token',
-            'GET /api/health': 'Check API health',
-        }
-    }), 200
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+    else:
+        response = jsonify({
+            'name': 'Tuniwix Stream Token API (Simplified)',
+            'version': '2.0.0',
+            'status': 'running',
+            'storage': 'Supabase REST API + Memory Fallback',
+            'endpoints': {
+                'POST /api/generate-token': 'Generate a token for a stream URL',
+                'GET /api/get-url/<token>': 'Retrieve stream URL using token',
+                'GET /api/health': 'Check API health',
+            }
+        })
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response, 200
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health', methods=['GET', 'OPTIONS'])
 def api_health():
     """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'API running',
-        'storage': 'Hybrid (Supabase + Memory)',
-        'tokens_in_memory': len(TOKEN_STORE)
-    }), 200
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+    else:
+        response = jsonify({
+            'status': 'healthy',
+            'service': 'API running',
+            'storage': 'Hybrid (Supabase + Memory)',
+            'tokens_in_memory': len(TOKEN_STORE)
+        })
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response, 200
 
 @app.route('/api/generate-token', methods=['POST', 'OPTIONS'])
 def api_generate_token():
     """Generate a token for a stream URL"""
     if request.method == 'OPTIONS':
-        return '', 200
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 200
         
     try:
         data = request.get_json()
         
         if not data or 'stream_url' not in data or 'media_type' not in data or 'media_id' not in data:
-            return jsonify({'error': 'Missing required fields: stream_url, media_type, media_id'}), 400
+            response = jsonify({'error': 'Missing required fields: stream_url, media_type, media_id'})
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            return response, 400
         
         # Generate unique token
         token = str(uuid.uuid4())
@@ -206,22 +228,34 @@ def api_generate_token():
         
         logger.info(f"Generated token: {token[:8]}... for {media_type} ID:{media_id}")
         
-        return jsonify({
+        response = jsonify({
             'success': True,
             'token': token,
             'expires_in': API_TOKEN_EXPIRY,
             'storage': 'Supabase' if supabase_success else 'Memory'
-        }), 200
+        })
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 200
         
     except Exception as e:
         logger.error(f"Error in generate-token: {e}")
-        return jsonify({'error': str(e)}), 500
+        response = jsonify({'error': str(e)})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 500
 
 @app.route('/api/get-url/<token>', methods=['GET', 'OPTIONS'])
 def api_get_url(token):
     """Retrieve stream URL using token"""
     if request.method == 'OPTIONS':
-        return '', 200
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 200
         
     try:
         # Try Supabase first
@@ -232,23 +266,44 @@ def api_get_url(token):
             result = retrieve_token_from_memory(token)
         
         if not result:
-            return jsonify({'error': 'Invalid or expired token'}), 404
+            response = jsonify({'error': 'Invalid or expired token'})
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            return response, 404
         
-        return jsonify(result), 200
+        response = jsonify(result)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 200
         
     except Exception as e:
         logger.error(f"Error in get-url: {e}")
-        return jsonify({'error': str(e)}), 500
+        response = jsonify({'error': str(e)})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 500
 
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({'error': 'Endpoint not found'}), 404
+    response = jsonify({'error': 'Endpoint not found'})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response, 404
 
 @app.errorhandler(500)
 def server_error(error):
     logger.error(f"Server error: {error}")
-    return jsonify({'error': 'Internal server error'}), 500
+    response = jsonify({'error': 'Internal server error'})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response, 500
 
 # For local development
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
+
